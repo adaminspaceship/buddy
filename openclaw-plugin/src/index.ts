@@ -151,18 +151,13 @@ export default definePluginEntry({
               api.logger.warn("Buddy: hooks.token not set — cannot dispatch to agent");
               return;
             }
-            await fetch(`http://127.0.0.1:${port}${hooksPath}/agent`, {
+            await fetch(`http://127.0.0.1:${port}${hooksPath}/wake`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${hooksToken}`,
               },
-              body: JSON.stringify({
-              message: transcription,
-              name: 'BuddyVoice',
-              wakeMode: 'now',
-              deliver: true,
-            }),
+              body: JSON.stringify({ text: transcription, mode: "now" }),
             });
           } catch (err) {
             api.logger.warn("Buddy: dispatch failed: " + String(err));

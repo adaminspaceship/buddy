@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import qrcode from "qrcode-terminal";
+import QRCode from "qrcode";
 
 const PLUGIN_ID = "buddy-voice";
 
@@ -113,16 +113,27 @@ export default definePluginEntry({
         }
         const token = config.authToken ?? "";
         const pairURL = `buddy://configure?endpoint=${encodeURIComponent(endpoint)}&token=${encodeURIComponent(token)}`;
-        const qrAscii = await new Promise<string>((resolve) => {
-          qrcode.generate(pairURL, { small: true }, resolve);
-        });
-        const text =
-          "**Pair your iPhone**\n\n" +
-          "Open the Camera app and point it at the QR below. Tap the banner — Buddy will auto-fill its Settings.\n\n" +
-          "```\n" + qrAscii + "```\n" +
-          "Or paste this URL into Buddy → Settings:\n\n" +
-          "```\n" + pairURL + "\n```\n";
-        return toolText(text);
+        const dataUrl = await QRCode.toDataURL(pairURL, { width: 400, margin: 2 });
+        const b64 = dataUrl.replace(/^data:image\/png;base64,/, "");
+        return {
+          content: [
+            {
+              type: "text",
+              text: `**Pair your iPhone**
+
+Point your iPhone Camera at the QR code below. Tap the banner — Buddy will auto-fill its Settings.
+
+Or enter manually in Buddy → Settings:
+- **Endpoint:** ${endpoint}
+- **Token:** ${token}`,
+            },
+            {
+              type: "image",
+              source: { type: "base64", media_type: "image/png", data: b64 },
+            },
+          ],
+          details: {},
+        };
       },
     });
 

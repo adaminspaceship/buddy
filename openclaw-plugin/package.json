@@ -1,5 +1,5 @@
 {
-  "name": "@adaminspaceship/openclaw-buddy",
+  "name": "@adaminspaceship/buddy",
   "version": "0.3.0",
   "description": "OpenClaw plugin: receives audio from the Buddy iOS app, transcribes it (BYOK), and dispatches the text to the active agent.",
   "type": "module",

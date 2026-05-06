@@ -25,7 +25,7 @@ In Xcode: set your Development Team in Signing & Capabilities → run on a real 
 ## Install the plugin into your OpenClaw
 
 ```bash
-openclaw plugins install clawhub:@adaminspaceship/openclaw-buddy
+openclaw plugins install clawhub:@adaminspaceship/buddy
 openclaw plugins configure buddy
 openclaw gateway restart
 ```

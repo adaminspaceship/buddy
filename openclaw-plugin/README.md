@@ -1,4 +1,4 @@
-# @adaminspaceship/openclaw-buddy
+# @adaminspaceship/buddy
 
 OpenClaw plugin that receives audio from the [Buddy iOS app](../) and dispatches the transcribed text to the active agent. Handles ingest → STT → agent injection. The iOS app stays minimal — it just POSTs the audio.
 

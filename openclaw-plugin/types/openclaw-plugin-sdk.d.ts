@@ -1,7 +1,6 @@
-// Local type stubs for @openclaw/plugin-sdk so this plugin can build without
-// the workspace package (it's only available inside the OpenClaw monorepo).
-// The real types come from the host runtime at load time.
-declare module "@openclaw/plugin-sdk" {
+// Local type stubs so this plugin can build without a workspace install of
+// the OpenClaw runtime. Real types come from the host at load time.
+declare module "openclaw/plugin-sdk/plugin-entry" {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   export type PluginApi = any;
 

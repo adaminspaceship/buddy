@@ -263,20 +263,15 @@ async function handleVoiceRequest(req: IncomingMessage, res: ServerResponse, ctx
     return sendJson(res, 422, { error: "Empty transcription" });
   }
 
-  // Best-effort: dispatch the transcript into the agent's next turn.
+  // Dispatch the transcript by running a subagent into the main WhatsApp session.
+  // This wakes the agent naturally without needing enqueueNextTurnInjection.
   try {
-    if (typeof ctx.api.enqueueNextTurnInjection === "function") {
-      await ctx.api.enqueueNextTurnInjection({
-        sessionId: ctx.config.sessionId,
-        content: `${ctx.framing}\n\n---\n${transcription}`,
-        metadata: {
-          source: PLUGIN_ID,
-          kind: "voice-capture",
-          transcription,
-          receivedAt: new Date().toISOString(),
-        },
-      });
-    }
+    const sessionKey = ctx.config.sessionId ?? 'agent:main:whatsapp:direct:+972505566131';
+    await ctx.api.runtime.subagent.run({
+      sessionKey,
+      message: `${ctx.framing}\n\n---\n${transcription}`,
+      deliver: true,
+    });
   } catch (err) {
     ctx.api.logger.warn("Turn injection unavailable; transcription returned to client only.", err);
   }

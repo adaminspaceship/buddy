@@ -11,13 +11,18 @@ export default definePluginEntry({
         const cfg = (api.pluginConfig ?? {});
         const prefix = (cfg.routePrefix ?? "/buddy").replace(/\/$/, "");
         const audioField = cfg.audioField ?? "audio";
-        // Auto-bootstrap: write enabled:true so startup load pins the HTTP route
+        // Default to openclaw built-in STT, fall back to elevenlabs/openai if configured
+        const provider = cfg.transcriptionProvider ?? "openclaw";
+        // Auto-bootstrap: on first load, write everything needed into config.
+        // This fires on every load (discovery + full) so ClawHub installs work
+        // without any manual steps — one gateway restart after install is enough.
         const generated = cfg.authToken ? null : randomUUID().replace(/-/g, "");
         if (generated)
             cfg.authToken = generated;
         Promise.resolve().then(async () => {
             try {
                 await api.runtime.config.mutateConfigFile((c) => {
+                    // Enable the plugin itself
                     c.plugins ??= {};
                     c.plugins.entries ??= {};
                     const e = c.plugins.entries[PLUGIN_ID] ??= {};
@@ -26,14 +31,14 @@ export default definePluginEntry({
                     e.config ??= {};
                     if (generated && !e.config.authToken)
                         e.config.authToken = generated;
-                    // Auto-bootstrap hooks config if not already set
+                    // Bootstrap hooks so /hooks/agent works out of the box
                     if (!c.hooks?.enabled) {
-                        const hooksToken = require('node:crypto').randomUUID().replace(/-/g, '');
+                        const hooksToken = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
                         c.hooks ??= {};
                         c.hooks.enabled = true;
-                        c.hooks.path = c.hooks.path ?? '/hooks';
+                        c.hooks.path = c.hooks.path ?? "/hooks";
                         c.hooks.token = c.hooks.token ?? hooksToken;
-                        c.hooks.defaultSessionKey = c.hooks.defaultSessionKey ?? 'agent:main';
+                        c.hooks.defaultSessionKey = c.hooks.defaultSessionKey ?? "agent:main";
                     }
                 });
             }
@@ -44,40 +49,50 @@ export default definePluginEntry({
             auth: "plugin",
             match: "exact",
             handler: async (req, res) => {
-                // Auth
+                // Auth check
                 if (cfg.authToken) {
                     const auth = req.headers["authorization"] ?? "";
                     if (auth !== `Bearer ${cfg.authToken}`) {
                         res.statusCode = 401;
+                        res.setHeader("Content-Type", "application/json");
                         res.end(JSON.stringify({ error: "Unauthorized" }));
                         return true;
                     }
                 }
-                // Parse multipart
+                // Parse multipart audio
                 let audioBuffer = null;
                 let audioMime = "audio/wav";
                 let audioFilename = "clip.wav";
-                await new Promise((resolve, reject) => {
-                    const bb = busboy({ headers: req.headers, limits: { fileSize: 100 * 1024 * 1024 } });
-                    bb.on("file", (field, stream, info) => {
-                        if (field !== audioField) {
-                            stream.resume();
-                            return;
-                        }
-                        audioMime = info.mimeType || audioMime;
-                        audioFilename = info.filename || audioFilename;
-                        const chunks = [];
-                        stream.on("data", (c) => chunks.push(c));
-                        stream.on("end", () => { audioBuffer = Buffer.concat(chunks); });
-                        stream.on("error", reject);
+                try {
+                    await new Promise((resolve, reject) => {
+                        const bb = busboy({ headers: req.headers, limits: { fileSize: 100 * 1024 * 1024 } });
+                        bb.on("file", (field, stream, info) => {
+                            if (field !== audioField) {
+                                stream.resume();
+                                return;
+                            }
+                            audioMime = info.mimeType || audioMime;
+                            audioFilename = info.filename || audioFilename;
+                            const chunks = [];
+                            stream.on("data", (c) => chunks.push(c));
+                            stream.on("end", () => { audioBuffer = Buffer.concat(chunks); });
+                            stream.on("error", reject);
+                        });
+                        bb.on("close", resolve);
+                        bb.on("error", reject);
+                        req.pipe(bb);
                     });
-                    bb.on("close", resolve);
-                    bb.on("error", reject);
-                    req.pipe(bb);
-                });
+                }
+                catch (err) {
+                    res.statusCode = 400;
+                    res.setHeader("Content-Type", "application/json");
+                    res.end(JSON.stringify({ error: "Multipart parse failed", detail: String(err) }));
+                    return true;
+                }
                 if (!audioBuffer) {
                     res.statusCode = 400;
-                    res.end(JSON.stringify({ error: `Missing field "${audioField}"` }));
+                    res.setHeader("Content-Type", "application/json");
+                    res.end(JSON.stringify({ error: `Missing audio field "${audioField}"` }));
                     return true;
                 }
                 // Stage to disk
@@ -89,14 +104,28 @@ export default definePluginEntry({
                 // Transcribe
                 let transcription;
                 try {
-                    transcription = await transcribe(stagedPath, audioMime, cfg);
+                    if (provider === "openclaw") {
+                        const result = await api.runtime.mediaUnderstanding.runFile({
+                            capability: "audio",
+                            filePath: stagedPath,
+                            mime: audioMime,
+                            cfg: api.runtime.config.current(),
+                        });
+                        transcription = (result?.text ?? "").trim();
+                        if (!transcription)
+                            throw new Error("OpenClaw STT returned empty text");
+                    }
+                    else {
+                        transcription = await transcribeExternal(stagedPath, audioMime, cfg);
+                    }
                 }
                 catch (err) {
                     res.statusCode = 502;
+                    res.setHeader("Content-Type", "application/json");
                     res.end(JSON.stringify({ error: "Transcription failed", detail: String(err) }));
                     return true;
                 }
-                // Respond immediately
+                // Respond to app immediately
                 res.statusCode = 200;
                 res.setHeader("Content-Type", "application/json");
                 res.end(JSON.stringify({ transcription }));
@@ -106,37 +135,31 @@ export default definePluginEntry({
                         const runtimeCfg = api.runtime.config.current();
                         const hooksToken = runtimeCfg?.hooks?.token;
                         const hooksPath = runtimeCfg?.hooks?.path ?? "/hooks";
-                        const port = process.env.OPENCLAW_GATEWAY_PORT ?? "18789";
-                        const allowFrom = runtimeCfg?.channels?.whatsapp?.allowFrom ?? [];
-                        const to = allowFrom[0] ?? "";
-                        if (!hooksToken)
+                        const port = runtimeCfg?.gateway?.port?.toString() ?? "18789";
+                        if (!hooksToken) {
+                            api.logger.warn("Buddy: hooks.token not set — cannot dispatch to agent");
                             return;
+                        }
                         await fetch(`http://127.0.0.1:${port}${hooksPath}/agent`, {
                             method: "POST",
                             headers: {
                                 "Content-Type": "application/json",
                                 "Authorization": `Bearer ${hooksToken}`,
                             },
-                            body: JSON.stringify({
-                                message: transcription,
-                                name: "BuddyVoice",
-                                deliver: true,
-                                channel: "whatsapp",
-                                to,
-                            }),
+                            body: JSON.stringify({ message: transcription, name: "BuddyVoice" }),
                         });
                     }
                     catch (err) {
-                        api.logger.warn("Buddy: dispatch to /hooks/agent failed: " + String(err));
+                        api.logger.warn("Buddy: dispatch failed: " + String(err));
                     }
                 });
                 return true;
             },
         });
-        api.logger.info(`Buddy ready at POST ${prefix}/voice`);
+        api.logger.info(`Buddy ready at POST ${prefix}/voice (provider: ${provider})`);
     },
 });
-async function transcribe(filePath, mime, cfg) {
+async function transcribeExternal(filePath, mime, cfg) {
     const provider = cfg.transcriptionProvider ?? "elevenlabs";
     const apiKey = cfg.apiKey ?? "";
     if (!apiKey)
@@ -157,12 +180,8 @@ async function transcribe(filePath, mime, cfg) {
         if (!res.ok)
             throw new Error(`ElevenLabs ${res.status}: ${await res.text()}`);
         const json = await res.json();
-        const text = (json.text ?? "").trim();
-        if (!text)
-            throw new Error("ElevenLabs returned empty text");
-        return text;
+        return (json.text ?? "").trim() || (() => { throw new Error("Empty response"); })();
     }
-    // openai
     form.append("model", cfg.model ?? "gpt-4o-transcribe");
     form.append("response_format", "json");
     form.append("file", blob, "clip");
@@ -174,9 +193,6 @@ async function transcribe(filePath, mime, cfg) {
     if (!res.ok)
         throw new Error(`OpenAI ${res.status}: ${await res.text()}`);
     const json = await res.json();
-    const text = (json.text ?? "").trim();
-    if (!text)
-        throw new Error("OpenAI returned empty text");
-    return text;
+    return (json.text ?? "").trim() || (() => { throw new Error("Empty response"); })();
 }
 //# sourceMappingURL=index.js.map

@@ -266,7 +266,7 @@ async function handleVoiceRequest(req: IncomingMessage, res: ServerResponse, ctx
   // Dispatch: inject a system event into the WhatsApp session and wake the heartbeat.
   // This is the same mechanism the cron scheduler uses to fire agent turns.
   try {
-    const sessionKey = ctx.config.sessionId ?? 'agent:main:whatsapp:direct:+972505566131';
+    const sessionKey = ctx.config.sessionId ?? 'agent:main';
     const text = `${ctx.framing}\n\n---\n${transcription}`;
     ctx.api.runtime.system.enqueueSystemEvent(text, { sessionKey, trusted: true });
     ctx.api.runtime.system.requestHeartbeat({ source: 'buddy-voice', intent: 'agent-turn', reason: 'voice capture received' });

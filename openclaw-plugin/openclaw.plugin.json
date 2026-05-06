@@ -6,10 +6,15 @@
   "homepage": "https://github.com/adaminspaceship/buddy",
   "activation": {
     "onStartup": true,
-    "onCapabilities": ["hook"]
+    "onCapabilities": [
+      "hook"
+    ]
   },
   "contracts": {
-    "tools": ["buddy_pair", "buddy_last_capture"]
+    "tools": [
+      "buddy_pair",
+      "buddy_last_capture"
+    ]
   },
   "httpRoutes": [
     {
@@ -32,7 +37,11 @@
         "type": "string",
         "title": "Transcription provider",
         "description": "Which speech-to-text service to use.",
-        "enum": ["openclaw", "elevenlabs", "openai"],
+        "enum": [
+          "openclaw",
+          "elevenlabs",
+          "openai"
+        ],
         "default": "openclaw"
       },
       "apiKey": {
@@ -51,8 +60,12 @@
         "type": "array",
         "title": "Default language hints",
         "description": "ISO 639-1 codes. Per-request hints from the iOS app's X-Language-Hints header override these.",
-        "items": { "type": "string" },
-        "default": ["en"]
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "en"
+        ]
       },
       "routePrefix": {
         "type": "string",
@@ -71,8 +84,8 @@
       },
       "sessionId": {
         "type": "string",
-        "title": "Target session id",
-        "description": "Optional. The agent session to inject the transcription into."
+        "title": "Target session key",
+        "description": "The OpenClaw session to inject voice captures into. Defaults to your WhatsApp DM session. Format: agent:main:whatsapp:direct:+1234567890"
       }
     },
     "required": []

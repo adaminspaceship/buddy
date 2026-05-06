@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import qrcode from "qrcode-terminal";
 
-const PLUGIN_ID = "buddy";
+const PLUGIN_ID = "buddy-voice";
 
 type TranscriptionProvider = "openclaw" | "elevenlabs" | "openai";
 

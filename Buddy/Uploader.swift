@@ -14,7 +14,7 @@ final class Uploader: NSObject {
         cfg.isDiscretionary = false
         cfg.sessionSendsLaunchEvents = true
         cfg.allowsCellularAccess = true
-        cfg.waitsForConnectivity = true
+        cfg.waitsForConnectivity = false
         return URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
     }()
 

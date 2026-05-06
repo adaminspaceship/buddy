@@ -284,7 +284,8 @@ async function handleVoiceRequest(req: IncomingMessage, res: ServerResponse, ctx
     const to = allowFrom[0] || '';
     const token = (cfg?.gateway?.auth?.token as string | undefined) || process.env.OPENCLAW_GATEWAY_TOKEN || '';
     const port = process.env.OPENCLAW_GATEWAY_PORT || '18789';
-    const message = `${ctx.framing}\n\n---\n${transcription}`;
+    // Just send the transcript — Jarvis knows it came from Buddy via system prompt
+    const message = `🎙️ ${transcription}`;
     if (to) {
       await new Promise<void>((resolve) => {
         execFile('openclaw', ['message', 'send',

@@ -47,27 +47,37 @@ export default definePluginEntry({
     const transcriptionProvider: TranscriptionProvider = config.transcriptionProvider ?? "openclaw";
     const isFullActivation = api.registrationMode === "full";
 
-    // Auto-generate a bearer token on first install if the user didn't set one.
-    if (isFullActivation && !config.authToken) {
-      const generated = randomUUID().replace(/-/g, "");
-      config.authToken = generated;
-      Promise.resolve().then(async () => {
-        try {
-          await api.runtime.config.mutateConfigFile((cfg: any) => {
-            cfg.plugins ??= {};
-            cfg.plugins.entries ??= {};
-            cfg.plugins.entries[PLUGIN_ID] ??= {};
-            cfg.plugins.entries[PLUGIN_ID].config ??= {};
-            if (!cfg.plugins.entries[PLUGIN_ID].config.authToken) {
-              cfg.plugins.entries[PLUGIN_ID].config.authToken = generated;
-            }
-          });
-          api.logger.info(`Generated authToken for ${PLUGIN_ID}.`);
-        } catch (err) {
-          api.logger.warn("Could not persist authToken; using session-only.", err);
-        }
-      });
-    }
+    // First-install bootstrap: write our own enabled:true entry to config so
+    // the next gateway restart includes us in startupPluginIds (otherwise the
+    // dispatcher's pinned http-route registry never sees our route). Also
+    // auto-generate an authToken if the user didn't set one. Both are
+    // fire-and-forget so register() stays synchronous per SDK contract.
+    //
+    // We deliberately DON'T gate this on isFullActivation — first-time
+    // install loads in non-full mode (we're not in startupPluginIds yet),
+    // and that's exactly when we need to write the entry.
+    const generated = config.authToken ? null : randomUUID().replace(/-/g, "");
+    if (generated) config.authToken = generated;
+    Promise.resolve().then(async () => {
+      try {
+        await api.runtime.config.mutateConfigFile((cfg: any) => {
+          cfg.plugins ??= {};
+          cfg.plugins.entries ??= {};
+          const entry = cfg.plugins.entries[PLUGIN_ID] ??= {};
+          if (entry.enabled !== true) entry.enabled = true;
+          entry.config ??= {};
+          if (generated && !entry.config.authToken) {
+            entry.config.authToken = generated;
+          }
+        });
+        api.logger.info(`Bootstrapped ${PLUGIN_ID} config (enabled + authToken). Restart the gateway to pin HTTP routes.`);
+      } catch (err) {
+        api.logger.warn(
+          "Could not write bootstrap config — user must manually add `plugins.entries.buddy-voice.enabled: true` to ~/.openclaw/openclaw.json",
+          err,
+        );
+      }
+    });
 
     // HTTP route — uses the simple { path, handler } shape per the canonical
     // pattern documented in the OpenClaw plugin SDK.

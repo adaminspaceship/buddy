@@ -209,7 +209,10 @@ struct ContentView: View {
     // MARK: - Helpers
 
     private func matchedRecord(for url: URL) -> CaptureRecord? {
-        recorder.recentCaptures.first(where: { $0.fileURL == url })
+        // Match by filename — full-URL equality fails when one side is
+        // /var/... and the other is /private/var/... on iOS.
+        let name = url.lastPathComponent
+        return recorder.recentCaptures.first(where: { $0.fileURL.lastPathComponent == name })
     }
 
     private func captureMetadata(for url: URL) -> CaptureMeta {

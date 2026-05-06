@@ -14,9 +14,9 @@ struct CaptureLast30sIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let record = await RecorderController.shared.captureLast30Seconds(reason: "intent")
         guard record != nil else {
-            return .result(dialog: "Couldn't grab any audio. Check microphone access.")
+            return .result(dialog: "Whimper… no audio. Check mic access.")
         }
-        return .result(dialog: "On it.")
+        return .result(dialog: "Ruff! On it.")
     }
 }
 

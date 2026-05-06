@@ -18,13 +18,18 @@ final class PlaybackController: NSObject, ObservableObject {
     }
 
     func play(_ url: URL) {
+        // Reuse the playAndRecord session AppDelegate sets at launch — switching
+        // to .playback while the recorder's engine has a live mic tap was firing
+        // an interruption and stalling the app. AVAudioPlayer plays fine under
+        // playAndRecord with .defaultToSpeaker.
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
-            try AVAudioSession.sharedInstance().setActive(true)
             let p = try AVAudioPlayer(contentsOf: url)
             p.delegate = self
             p.prepareToPlay()
-            p.play()
+            guard p.play() else {
+                stop()
+                return
+            }
             player = p
             playingURL = url
         } catch {
@@ -37,13 +42,6 @@ final class PlaybackController: NSObject, ObservableObject {
         player?.stop()
         player = nil
         playingURL = nil
-        // Restore record-capable session if recorder is running.
-        if RecorderController.shared.isRunning {
-            try? AVAudioSession.sharedInstance().setCategory(.playAndRecord,
-                mode: .default,
-                options: [.mixWithOthers, .allowBluetooth, .defaultToSpeaker])
-            try? AVAudioSession.sharedInstance().setActive(true)
-        }
     }
 }
 

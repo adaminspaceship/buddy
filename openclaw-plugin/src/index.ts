@@ -231,7 +231,16 @@ async function handleVoiceRequest(req: IncomingMessage, res: ServerResponse, ctx
     return sendJson(res, 400, { error: `Missing audio field "${ctx.audioField}"` });
   }
 
-  // Stage to disk for the transcription provider
+  // Instant ack — fire-and-forget so UI knows we received it
+  setImmediate(() => {
+    try {
+      const sessionKey = ctx.config.sessionId ?? 'agent:main';
+      ctx.api.runtime.system.enqueueSystemEvent('🎙️ received — transcribing...', { sessionKey, trusted: true });
+      ctx.api.runtime.system.requestHeartbeat({ source: 'buddy-voice', intent: 'agent-turn', reason: 'ack' });
+    } catch {}
+  });
+
+    // Stage to disk for the transcription provider
   let stagedPath: string;
   try {
     const stateDir = await ctx.api.runtime.state.resolveStateDir(PLUGIN_ID);

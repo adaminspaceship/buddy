@@ -1,5 +1,5 @@
 {
-  "id": "buddy",
+  "id": "buddy-voice",
   "name": "Buddy",
   "version": "0.2.0",
   "description": "Receives audio from the Buddy iOS app, transcribes it, and dispatches the text to the active agent.",

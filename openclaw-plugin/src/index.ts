@@ -1,13 +1,12 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import busboy from "busboy";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import qrcode from "qrcode-terminal";
 
 const PLUGIN_ID = "buddy-voice";
-const SERVICE_ID = "buddy-voice-server";
 
 type TranscriptionProvider = "openclaw" | "elevenlabs" | "openai";
 
@@ -21,8 +20,6 @@ interface PluginConfig {
   transcriptionProvider?: TranscriptionProvider;
   apiKey?: string;
   model?: string;
-  host?: string;
-  port?: number;
 }
 
 const DEFAULT_FRAMING = [
@@ -48,8 +45,6 @@ export default definePluginEntry({
     const framing = config.framing ?? DEFAULT_FRAMING;
     const defaultLanguageHints = config.languageHints ?? ["en"];
     const transcriptionProvider: TranscriptionProvider = config.transcriptionProvider ?? "openclaw";
-    const host = config.host ?? "127.0.0.1";
-    const port = config.port ?? 18792;
     const isFullActivation = api.registrationMode === "full";
 
     // Auto-generate a bearer token on first install if the user didn't set one.
@@ -73,6 +68,24 @@ export default definePluginEntry({
         }
       });
     }
+
+    // HTTP route — uses the simple { path, handler } shape per the canonical
+    // pattern documented in the OpenClaw plugin SDK.
+    api.registerHttpRoute({
+      path: `${prefix}/voice`,
+      handler: async (req: IncomingMessage, res: ServerResponse) => {
+        try {
+          await handleVoiceRequest(req, res, {
+            api, config, audioField, framing, defaultLanguageHints, transcriptionProvider,
+          });
+        } catch (err) {
+          api.logger.error("Buddy /voice handler crashed", err);
+          if (!res.headersSent) {
+            sendJson(res, 500, { error: "Internal server error", detail: String(err) });
+          }
+        }
+      },
+    });
 
     // Tools — verified canonical shape from voice-call.
     api.registerTool({
@@ -124,47 +137,7 @@ export default definePluginEntry({
       },
     });
 
-    // HTTP server lives in a service so it has a clean lifecycle (start/stop).
-    let server: Server | null = null;
-    api.registerService({
-      id: SERVICE_ID,
-      start: async () => {
-        server = createServer((req, res) => handleRequest(req, res, {
-          api, config, prefix, audioField, framing, defaultLanguageHints, transcriptionProvider,
-        }).catch((err) => {
-          api.logger.error("Buddy request handler crashed", err);
-          if (!res.headersSent) {
-            sendJson(res, 500, { error: "Internal server error", detail: String(err) });
-          }
-        }));
-        try {
-          await new Promise<void>((resolve, reject) => {
-            server!.once("error", reject);
-            server!.listen(port, host, () => {
-              server!.off("error", reject);
-              resolve();
-            });
-          });
-          api.logger.info(`Buddy HTTP server listening on http://${host}:${port}${prefix}/voice`);
-        } catch (err: any) {
-          if (err?.code === "EADDRINUSE") {
-            api.logger.error(`Buddy HTTP server FAILED to bind: port ${port} is already in use. Set plugins.entries.${PLUGIN_ID}.config.port to a free port.`);
-          } else {
-            api.logger.error(`Buddy HTTP server FAILED to start: ${err?.message ?? err}`);
-          }
-          server = null;
-        }
-      },
-      stop: async () => {
-        if (!server) return;
-        await new Promise<void>((resolve) => {
-          server!.close(() => resolve());
-        });
-        server = null;
-      },
-    });
-
-    api.logger.info(`Buddy plugin ready (HTTP via service "${SERVICE_ID}", route ${prefix}/voice)`);
+    api.logger.info(`Buddy plugin ready at POST ${prefix}/voice (field "${audioField}")`);
   },
 });
 
@@ -175,24 +148,18 @@ let lastCapture: { text: string; receivedAt: string } | null = null;
 interface HandlerCtx {
   api: any;
   config: PluginConfig;
-  prefix: string;
   audioField: string;
   framing: string;
   defaultLanguageHints: string[];
   transcriptionProvider: TranscriptionProvider;
 }
 
-async function handleRequest(req: IncomingMessage, res: ServerResponse, ctx: HandlerCtx): Promise<void> {
-  const url = req.url ?? "/";
-  const method = req.method ?? "GET";
-
-  // Health probe — useful for "Test connection" from the iOS app.
-  if (method === "GET" && (url === "/" || url === "/health" || url === `${ctx.prefix}/health`)) {
-    return sendJson(res, 200, { ok: true, plugin: "buddy-voice", route: `${ctx.prefix}/voice` });
-  }
-
-  if (method !== "POST" || url !== `${ctx.prefix}/voice`) {
-    return sendJson(res, 404, { error: "Not found", route: `${ctx.prefix}/voice` });
+async function handleVoiceRequest(req: IncomingMessage, res: ServerResponse, ctx: HandlerCtx): Promise<void> {
+  if (req.method !== "POST") {
+    res.statusCode = 405;
+    res.setHeader("Allow", "POST");
+    res.end("Method Not Allowed");
+    return;
   }
 
   // Bearer auth (when configured)

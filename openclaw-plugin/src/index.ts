@@ -231,12 +231,15 @@ async function handleVoiceRequest(req: IncomingMessage, res: ServerResponse, ctx
     return sendJson(res, 400, { error: `Missing audio field "${ctx.audioField}"` });
   }
 
-  // Instant ack — fire-and-forget so UI knows we received it
-  setImmediate(() => {
+  // Instant ack via outbound adapter — no agent turn triggered
+  setImmediate(async () => {
     try {
-      const sessionKey = ctx.config.sessionId ?? 'agent:main';
-      ctx.api.runtime.system.enqueueSystemEvent('🎙️ received — transcribing...', { sessionKey, trusted: true });
-      ctx.api.runtime.system.requestHeartbeat({ source: 'buddy-voice', intent: 'agent-turn', reason: 'ack' });
+      const adapter = await ctx.api.runtime.channel.outbound.loadAdapter('whatsapp');
+      if (adapter) {
+        const cfg = ctx.api.runtime.config.current() as any;
+        const to = req.headers['x-sender'] as string || cfg?.channels?.whatsapp?.allowFrom?.[0] || '';
+        if (to) await adapter.send({ cfg, to, text: '🎙️' });
+      }
     } catch {}
   });
 

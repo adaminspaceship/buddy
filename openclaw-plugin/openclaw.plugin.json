@@ -1,7 +1,7 @@
 {
   "id": "buddy-voice",
   "name": "Buddy",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Receives audio from the Buddy iOS app, transcribes it, and dispatches the text to the active agent.",
   "homepage": "https://github.com/adaminspaceship/buddy",
   "activation": {
@@ -10,6 +10,12 @@
   "contracts": {
     "tools": ["buddy_pair", "buddy_last_capture"]
   },
+  "services": [
+    {
+      "name": "buddy-voice-server",
+      "description": "Loopback HTTP server that accepts multipart audio uploads from the Buddy iOS app and dispatches the transcript to the agent."
+    }
+  ],
   "httpRoutes": [
     {
       "method": "POST",
@@ -62,6 +68,18 @@
         "type": "string",
         "title": "Multipart field name for the audio file",
         "default": "audio"
+      },
+      "host": {
+        "type": "string",
+        "title": "HTTP listen host",
+        "description": "Bind address for the loopback HTTP server. Keep on 127.0.0.1 unless you fully trust the network.",
+        "default": "127.0.0.1"
+      },
+      "port": {
+        "type": "number",
+        "title": "HTTP listen port",
+        "description": "TCP port the loopback server listens on. Reverse-proxy this from your gateway (e.g. Caddy).",
+        "default": 18790
       },
       "framing": {
         "type": "string",

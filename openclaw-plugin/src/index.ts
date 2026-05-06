@@ -1,13 +1,13 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
-import { registerPluginHttpRoute } from "openclaw/plugin-sdk/webhook-ingress";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import busboy from "busboy";
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import qrcode from "qrcode-terminal";
-import type { IncomingMessage, ServerResponse } from "node:http";
 
 const PLUGIN_ID = "buddy-voice";
+const SERVICE_ID = "buddy-voice-server";
 
 type TranscriptionProvider = "openclaw" | "elevenlabs" | "openai";
 
@@ -21,6 +21,8 @@ interface PluginConfig {
   transcriptionProvider?: TranscriptionProvider;
   apiKey?: string;
   model?: string;
+  host?: string;
+  port?: number;
 }
 
 const DEFAULT_FRAMING = [
@@ -46,6 +48,8 @@ export default definePluginEntry({
     const framing = config.framing ?? DEFAULT_FRAMING;
     const defaultLanguageHints = config.languageHints ?? ["en"];
     const transcriptionProvider: TranscriptionProvider = config.transcriptionProvider ?? "openclaw";
+    const host = config.host ?? "127.0.0.1";
+    const port = config.port ?? 18790;
     const isFullActivation = api.registrationMode === "full";
 
     // Auto-generate a bearer token on first install if the user didn't set one.
@@ -70,123 +74,7 @@ export default definePluginEntry({
       });
     }
 
-    // HTTP route: POST <prefix>/voice — Express-style (req, res), as used by
-    // every canonical plugin that exposes inbound HTTP.
-    registerPluginHttpRoute({
-      auth: "plugin",
-      match: "exact",
-      path: `${prefix}/voice`,
-      pluginId: PLUGIN_ID,
-      source: "buddy-voice-ingress",
-      log: api.logger,
-      handler: async (req, res) => {
-        if (req.method !== "POST") {
-          return sendJson(res, 405, { error: "Method not allowed" });
-        }
-
-        // Bearer auth (when configured)
-        if (config.authToken) {
-          const header = (req.headers["authorization"] as string | undefined) ?? "";
-          if (header !== `Bearer ${config.authToken}`) {
-            return sendJson(res, 401, { error: "Unauthorized" });
-          }
-        }
-
-        const headerHints = (req.headers["x-language-hints"] as string | undefined) ?? "";
-        const languageHints = headerHints
-          ? headerHints.split(",").map((s) => s.trim()).filter(Boolean)
-          : defaultLanguageHints;
-
-        // Parse multipart, capture the audio field
-        let audioBuffer: Buffer | null = null;
-        let audioMime = "audio/wav";
-        let audioFilename = "clip.wav";
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const bb = busboy({ headers: req.headers, limits: { fileSize: 100 * 1024 * 1024 } });
-            bb.on("file", (fieldName, stream, info) => {
-              if (fieldName !== audioField) {
-                stream.resume();
-                return;
-              }
-              audioMime = info.mimeType || audioMime;
-              audioFilename = info.filename || audioFilename;
-              const chunks: Buffer[] = [];
-              stream.on("data", (chunk: Buffer) => chunks.push(chunk));
-              stream.on("end", () => { audioBuffer = Buffer.concat(chunks); });
-              stream.on("error", reject);
-            });
-            bb.on("close", resolve);
-            bb.on("error", reject);
-            req.pipe(bb);
-          });
-        } catch (err) {
-          api.logger.error("Multipart parse failed", err);
-          return sendJson(res, 400, { error: "Invalid multipart body", detail: String(err) });
-        }
-
-        if (!audioBuffer) {
-          return sendJson(res, 400, { error: `Missing audio field "${audioField}"` });
-        }
-
-        // Stage to disk for the transcription provider
-        let stagedPath: string;
-        try {
-          const stateDir = await api.runtime.state.resolveStateDir(PLUGIN_ID);
-          await mkdir(stateDir, { recursive: true });
-          const ext = inferExtension(audioMime, audioFilename);
-          stagedPath = join(stateDir, `clip-${Date.now()}-${randomUUID()}${ext}`);
-          await writeFile(stagedPath, audioBuffer);
-        } catch (err) {
-          api.logger.error("Failed to stage upload", err);
-          return sendJson(res, 500, { error: "Could not stage audio", detail: String(err) });
-        }
-
-        let transcription: string;
-        try {
-          transcription = await transcribe({
-            provider: transcriptionProvider,
-            apiKey: config.apiKey,
-            model: config.model,
-            stagedPath,
-            audioMime,
-            languageHints,
-            api,
-          });
-        } catch (err) {
-          api.logger.error("Transcription failed", err);
-          return sendJson(res, 502, { error: "Transcription provider failed", detail: String(err) });
-        }
-        if (!transcription) {
-          return sendJson(res, 422, { error: "Empty transcription" });
-        }
-
-        // Best-effort: try to dispatch the transcript into the agent's next
-        // turn. If the symbol isn't available on this runtime version, we
-        // still return the text to the iOS app so the feature degrades gracefully.
-        try {
-          if (typeof api.enqueueNextTurnInjection === "function") {
-            await api.enqueueNextTurnInjection({
-              sessionId: config.sessionId,
-              content: `${framing}\n\n---\n${transcription}`,
-              metadata: {
-                source: PLUGIN_ID,
-                kind: "voice-capture",
-                transcription,
-                receivedAt: new Date().toISOString(),
-              },
-            });
-          }
-        } catch (err) {
-          api.logger.warn("Turn injection unavailable; transcription returned to client only.", err);
-        }
-
-        lastCapture = { text: transcription, receivedAt: new Date().toISOString() };
-        sendJson(res, 200, { transcription });
-      },
-    });
-
-    // Tools — using verified field shape from canonical plugins.
+    // Tools — verified canonical shape from voice-call.
     api.registerTool({
       name: "buddy_pair",
       label: "Pair iPhone with Buddy",
@@ -236,11 +124,166 @@ export default definePluginEntry({
       },
     });
 
-    api.logger.info(`Buddy plugin ready at POST ${prefix}/voice (field "${audioField}")`);
+    // HTTP server lives in a service so it has a clean lifecycle (start/stop).
+    let server: Server | null = null;
+    api.registerService({
+      id: SERVICE_ID,
+      start: async () => {
+        server = createServer((req, res) => handleRequest(req, res, {
+          api, config, prefix, audioField, framing, defaultLanguageHints, transcriptionProvider,
+        }).catch((err) => {
+          api.logger.error("Buddy request handler crashed", err);
+          if (!res.headersSent) {
+            sendJson(res, 500, { error: "Internal server error", detail: String(err) });
+          }
+        }));
+        await new Promise<void>((resolve, reject) => {
+          server!.once("error", reject);
+          server!.listen(port, host, () => {
+            server!.off("error", reject);
+            resolve();
+          });
+        });
+        api.logger.info(`Buddy HTTP server listening on http://${host}:${port}${prefix}/voice`);
+      },
+      stop: async () => {
+        if (!server) return;
+        await new Promise<void>((resolve) => {
+          server!.close(() => resolve());
+        });
+        server = null;
+      },
+    });
+
+    api.logger.info(`Buddy plugin ready (HTTP via service "${SERVICE_ID}", route ${prefix}/voice)`);
   },
 });
 
 let lastCapture: { text: string; receivedAt: string } | null = null;
+
+// MARK: - Request handler
+
+interface HandlerCtx {
+  api: any;
+  config: PluginConfig;
+  prefix: string;
+  audioField: string;
+  framing: string;
+  defaultLanguageHints: string[];
+  transcriptionProvider: TranscriptionProvider;
+}
+
+async function handleRequest(req: IncomingMessage, res: ServerResponse, ctx: HandlerCtx): Promise<void> {
+  const url = req.url ?? "/";
+  const method = req.method ?? "GET";
+
+  // Health probe — useful for "Test connection" from the iOS app.
+  if (method === "GET" && (url === "/" || url === "/health" || url === `${ctx.prefix}/health`)) {
+    return sendJson(res, 200, { ok: true, plugin: "buddy-voice", route: `${ctx.prefix}/voice` });
+  }
+
+  if (method !== "POST" || url !== `${ctx.prefix}/voice`) {
+    return sendJson(res, 404, { error: "Not found", route: `${ctx.prefix}/voice` });
+  }
+
+  // Bearer auth (when configured)
+  if (ctx.config.authToken) {
+    const header = (req.headers["authorization"] as string | undefined) ?? "";
+    if (header !== `Bearer ${ctx.config.authToken}`) {
+      return sendJson(res, 401, { error: "Unauthorized" });
+    }
+  }
+
+  const headerHints = (req.headers["x-language-hints"] as string | undefined) ?? "";
+  const languageHints = headerHints
+    ? headerHints.split(",").map((s) => s.trim()).filter(Boolean)
+    : ctx.defaultLanguageHints;
+
+  // Parse multipart, capture the audio field
+  let audioBuffer: Buffer | null = null;
+  let audioMime = "audio/wav";
+  let audioFilename = "clip.wav";
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const bb = busboy({ headers: req.headers, limits: { fileSize: 100 * 1024 * 1024 } });
+      bb.on("file", (fieldName, stream, info) => {
+        if (fieldName !== ctx.audioField) {
+          stream.resume();
+          return;
+        }
+        audioMime = info.mimeType || audioMime;
+        audioFilename = info.filename || audioFilename;
+        const chunks: Buffer[] = [];
+        stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+        stream.on("end", () => { audioBuffer = Buffer.concat(chunks); });
+        stream.on("error", reject);
+      });
+      bb.on("close", resolve);
+      bb.on("error", reject);
+      req.pipe(bb);
+    });
+  } catch (err) {
+    ctx.api.logger.error("Multipart parse failed", err);
+    return sendJson(res, 400, { error: "Invalid multipart body", detail: String(err) });
+  }
+
+  if (!audioBuffer) {
+    return sendJson(res, 400, { error: `Missing audio field "${ctx.audioField}"` });
+  }
+
+  // Stage to disk for the transcription provider
+  let stagedPath: string;
+  try {
+    const stateDir = await ctx.api.runtime.state.resolveStateDir(PLUGIN_ID);
+    await mkdir(stateDir, { recursive: true });
+    const ext = inferExtension(audioMime, audioFilename);
+    stagedPath = join(stateDir, `clip-${Date.now()}-${randomUUID()}${ext}`);
+    await writeFile(stagedPath, audioBuffer);
+  } catch (err) {
+    ctx.api.logger.error("Failed to stage upload", err);
+    return sendJson(res, 500, { error: "Could not stage audio", detail: String(err) });
+  }
+
+  let transcription: string;
+  try {
+    transcription = await transcribe({
+      provider: ctx.transcriptionProvider,
+      apiKey: ctx.config.apiKey,
+      model: ctx.config.model,
+      stagedPath,
+      audioMime,
+      languageHints,
+      api: ctx.api,
+    });
+  } catch (err) {
+    ctx.api.logger.error("Transcription failed", err);
+    return sendJson(res, 502, { error: "Transcription provider failed", detail: String(err) });
+  }
+  if (!transcription) {
+    return sendJson(res, 422, { error: "Empty transcription" });
+  }
+
+  // Best-effort: dispatch the transcript into the agent's next turn.
+  try {
+    if (typeof ctx.api.enqueueNextTurnInjection === "function") {
+      await ctx.api.enqueueNextTurnInjection({
+        sessionId: ctx.config.sessionId,
+        content: `${ctx.framing}\n\n---\n${transcription}`,
+        metadata: {
+          source: PLUGIN_ID,
+          kind: "voice-capture",
+          transcription,
+          receivedAt: new Date().toISOString(),
+        },
+      });
+    }
+  } catch (err) {
+    ctx.api.logger.warn("Turn injection unavailable; transcription returned to client only.", err);
+  }
+
+  lastCapture = { text: transcription, receivedAt: new Date().toISOString() };
+  sendJson(res, 200, { transcription });
+}
 
 // MARK: - Helpers
 

@@ -36,6 +36,16 @@ export default definePluginEntry({
           if (e.enabled !== true) e.enabled = true;
           e.config ??= {};
           if (generated && !e.config.authToken) e.config.authToken = generated;
+
+          // Auto-bootstrap hooks config if not already set
+          if (!c.hooks?.enabled) {
+            const hooksToken = require('node:crypto').randomUUID().replace(/-/g, '');
+            c.hooks ??= {};
+            c.hooks.enabled = true;
+            c.hooks.path = c.hooks.path ?? '/hooks';
+            c.hooks.token = c.hooks.token ?? hooksToken;
+            c.hooks.defaultSessionKey = c.hooks.defaultSessionKey ?? 'agent:main';
+          }
         });
       } catch {}
     });

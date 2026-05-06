@@ -200,7 +200,24 @@ async function handleVoiceRequest(req: IncomingMessage, res: ServerResponse, ctx
     ? headerHints.split(",").map((s) => s.trim()).filter(Boolean)
     : ctx.defaultLanguageHints;
 
-  // Parse multipart, capture the audio field
+  // Instant ack — send 🎙️ immediately so user knows it was received
+  setImmediate(async () => {
+    try {
+      const cfg = ctx.api.runtime.config.current() as any;
+      const hooksToken = cfg?.hooks?.token as string | undefined;
+      const hooksPath = (cfg?.hooks?.path as string | undefined) ?? '/hooks';
+      const port = process.env.OPENCLAW_GATEWAY_PORT || '18789';
+      if (hooksToken) {
+        await fetch(`http://127.0.0.1:${port}${hooksPath}/voice`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${hooksToken}` },
+          body: JSON.stringify({ transcription: '🎙️' }),
+        });
+      }
+    } catch {}
+  });
+
+    // Parse multipart, capture the audio field
   let audioBuffer: Buffer | null = null;
   let audioMime = "audio/wav";
   let audioFilename = "clip.wav";

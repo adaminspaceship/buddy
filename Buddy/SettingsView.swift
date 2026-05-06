@@ -81,14 +81,30 @@ struct SettingsView: View {
                     Text("Map the Action Button: iOS Settings → Action Button → Shortcut → Tell Buddy.")
                 }
             }
-            .navigationTitle("Settings")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("SETTINGS")
+                        .font(BuddyFont.display(18))
+                        .tracking(3)
+                        .foregroundStyle(BuddyPalette.ink)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
-                        .fontWeight(.semibold)
+                        .font(BuddyFont.display(14))
+                        .foregroundStyle(BuddyPalette.ink)
                 }
             }
+            .tint(BuddyPalette.ink)
+            .scrollContentBackground(.hidden)
+            .background(
+                LinearGradient(
+                    colors: [BuddyPalette.skyLight, BuddyPalette.cream],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .ignoresSafeArea()
+            )
         }
     }
 

@@ -73,6 +73,7 @@ export default definePluginEntry({
     // pattern documented in the OpenClaw plugin SDK.
     api.registerHttpRoute({
       path: `${prefix}/voice`,
+      auth: "plugin",
       handler: async (req: IncomingMessage, res: ServerResponse) => {
         try {
           await handleVoiceRequest(req, res, {

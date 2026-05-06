@@ -5,6 +5,7 @@ import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import QRCode from "qrcode";
+import { execFile } from "node:child_process";
 
 const PLUGIN_ID = "buddy-voice";
 
@@ -275,15 +276,29 @@ async function handleVoiceRequest(req: IncomingMessage, res: ServerResponse, ctx
     return sendJson(res, 422, { error: "Empty transcription" });
   }
 
-  // Dispatch: send the transcription as a WhatsApp message to the user.
-  // The agent sees it as an inbound message and responds — no session wake needed.
+  // Dispatch: invoke the openclaw CLI to send a WhatsApp message to the user.
+  // This triggers an inbound turn in the agent session and gets a reply.
   try {
-    const adapter = await ctx.api.runtime.channel.outbound.loadAdapter('whatsapp');
     const cfg = ctx.api.runtime.config.current() as any;
     const allowFrom: string[] = cfg?.channels?.whatsapp?.allowFrom ?? [];
-    const to = ctx.config.sessionId || allowFrom[0] || '';
-    if (adapter && to) {
-      await adapter.send({ cfg, to, text: `${ctx.framing}\n\n---\n${transcription}` });
+    const to = allowFrom[0] || '';
+    const token = (cfg?.gateway?.auth?.token as string | undefined) || process.env.OPENCLAW_GATEWAY_TOKEN || '';
+    const port = process.env.OPENCLAW_GATEWAY_PORT || '18789';
+    const message = `${ctx.framing}\n\n---\n${transcription}`;
+    if (to) {
+      await new Promise<void>((resolve) => {
+        execFile('openclaw', ['message', 'send',
+          '--channel', 'whatsapp',
+          '--target', to,
+          '--message', message,
+        ], {
+          env: { ...process.env, OPENCLAW_GATEWAY_TOKEN: token, OPENCLAW_GATEWAY_PORT: port },
+          timeout: 15000,
+        }, (err) => {
+          if (err) ctx.api.logger.warn('Buddy dispatch CLI failed: ' + String(err));
+          resolve();
+        });
+      });
     }
   } catch (err) {
     ctx.api.logger.warn("Turn injection unavailable; transcription returned to client only.", err);

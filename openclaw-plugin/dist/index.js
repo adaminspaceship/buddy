@@ -146,7 +146,14 @@ export default definePluginEntry({
                                 "Content-Type": "application/json",
                                 "Authorization": `Bearer ${hooksToken}`,
                             },
-                            body: JSON.stringify({ message: transcription, name: "BuddyVoice" }),
+                            body: JSON.stringify({
+                                message: transcription,
+                                name: 'BuddyVoice',
+                                wakeMode: 'now',
+                                deliver: true,
+                                channel: 'whatsapp',
+                                to: runtimeCfg?.channels?.whatsapp?.allowFrom?.[0] ?? '',
+                            }),
                         });
                     }
                     catch (err) {

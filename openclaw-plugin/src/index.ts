@@ -162,8 +162,6 @@ export default definePluginEntry({
               name: 'BuddyVoice',
               wakeMode: 'now',
               deliver: true,
-              channel: 'whatsapp',
-              to: (runtimeCfg?.channels?.whatsapp?.allowFrom as string[] | undefined)?.[0] ?? '',
             }),
             });
           } catch (err) {

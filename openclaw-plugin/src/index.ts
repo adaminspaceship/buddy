@@ -74,6 +74,7 @@ export default definePluginEntry({
     api.registerHttpRoute({
       path: `${prefix}/voice`,
       auth: "plugin",
+      match: "exact",
       handler: async (req: IncomingMessage, res: ServerResponse) => {
         try {
           await handleVoiceRequest(req, res, {
@@ -85,6 +86,7 @@ export default definePluginEntry({
             sendJson(res, 500, { error: "Internal server error", detail: String(err) });
           }
         }
+        return true;
       },
     });
 

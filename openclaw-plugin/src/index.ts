@@ -2,6 +2,7 @@ import { definePluginEntry } from "@openclaw/plugin-sdk";
 import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import qrcode from "qrcode-terminal";
 
 const PLUGIN_ID = "buddy";
 
@@ -196,6 +197,48 @@ export default definePluginEntry({
       // The runtime accepts either a string return or a structured envelope;
       // both shapes are documented as valid contributions for prompt-build hooks.
       return { systemAddendum: note };
+    });
+
+    // Pair-by-QR: ask the agent "pair my phone" → it prints an ASCII QR
+    // containing buddy://configure?endpoint=...&token=... — point your iPhone
+    // Camera at the terminal, tap the banner, Buddy auto-fills its Settings.
+    api.registerTool({
+      id: `${PLUGIN_ID}.pair`,
+      name: "Pair iPhone with Buddy",
+      description:
+        "Generates a QR code and a buddy:// pairing URL that the user scans with their iPhone Camera to auto-configure the Buddy app's connection to this gateway. Call this when the user asks to set up, pair, or connect their phone.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          endpoint: {
+            type: "string",
+            description:
+              "Full URL of the /buddy/voice route as the iPhone reaches it from the public internet, e.g. https://your-host.com/buddy/voice",
+          },
+        },
+        required: ["endpoint"],
+      },
+      execute: async (input: any) => {
+        const endpoint: string = String(input?.endpoint ?? "").trim();
+        if (!endpoint) {
+          return { text: "Need an endpoint URL — pass the public URL of /buddy/voice (e.g. https://your-host.com/buddy/voice)." };
+        }
+        const token = config.authToken ?? "";
+        if (!token) {
+          return { text: "No authToken set in plugin config. Configure one first, then try again." };
+        }
+        const pairURL = `buddy://configure?endpoint=${encodeURIComponent(endpoint)}&token=${encodeURIComponent(token)}`;
+
+        const qrAscii = await new Promise<string>((resolve) => {
+          qrcode.generate(pairURL, { small: true }, resolve);
+        });
+
+        return {
+          text:
+            `Scan this with your iPhone Camera:\n\n${qrAscii}\n` +
+            `Or paste into Buddy → Settings:\n${pairURL}\n`,
+        };
+      },
     });
 
     // Optional: a tool the agent can call to recall what was just heard.

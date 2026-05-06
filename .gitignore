@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Claude Code session state
+.claude/
+
+# Xcode
+**/xcuserdata/
+**/*.xcuserstate
+**/DerivedData/
+
+# XcodeGen output (regenerable from project.yml)
+*.xcodeproj/
+
+# Node / TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Build artifacts
+*.log
+*.tgz
+
+# Local env
+.env
+.env.local

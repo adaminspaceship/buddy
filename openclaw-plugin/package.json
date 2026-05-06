@@ -1,0 +1,59 @@
+{
+  "name": "@adaminspaceship/openclaw-buddy",
+  "version": "0.2.0",
+  "description": "OpenClaw plugin: receives audio from the Buddy iOS app, transcribes it (BYOK), and dispatches the text to the active agent.",
+  "type": "module",
+  "main": "dist/index.js",
+  "files": [
+    "dist/**",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "publish:dry": "npm run build && clawhub package publish . --family bundle-plugin --dry-run",
+    "publish:clawhub": "npm run build && clawhub package publish . --family bundle-plugin",
+    "prepublishOnly": "npm run build"
+  },
+  "openclaw": {
+    "extensions": ["./src/index.ts"],
+    "runtimeExtensions": ["./dist/index.js"],
+    "compat": {
+      "pluginApi": "*",
+      "minGatewayVersion": "0.0.0"
+    },
+    "release": {
+      "publishToClawHub": true,
+      "publishToNpm": false
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adaminspaceship/buddy.git",
+    "directory": "openclaw-plugin"
+  },
+  "homepage": "https://github.com/adaminspaceship/buddy#readme",
+  "license": "MIT",
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "voice",
+    "transcription",
+    "ios",
+    "buddy"
+  ],
+  "peerDependencies": {
+    "openclaw": ">=2026.4.10"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": { "optional": true }
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

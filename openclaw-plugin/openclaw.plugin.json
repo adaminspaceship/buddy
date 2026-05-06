@@ -1,0 +1,65 @@
+{
+  "id": "buddy",
+  "name": "Buddy",
+  "version": "0.2.0",
+  "description": "Receives audio from the Buddy iOS app, transcribes it, and dispatches the text to the active agent.",
+  "homepage": "https://github.com/adaminspaceship/buddy",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "authToken": {
+        "type": "string",
+        "title": "Bearer token",
+        "description": "The token the iOS app must send. Any long random string works.",
+        "format": "secret"
+      },
+      "transcriptionProvider": {
+        "type": "string",
+        "title": "Transcription provider",
+        "description": "Which speech-to-text service to use.",
+        "enum": ["openclaw", "elevenlabs", "openai"],
+        "default": "openclaw"
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "Provider API key",
+        "description": "Required when transcriptionProvider is 'elevenlabs' or 'openai'.",
+        "format": "secret"
+      },
+      "model": {
+        "type": "string",
+        "title": "Model id",
+        "description": "Override the default model. ElevenLabs: scribe_v1. OpenAI: gpt-4o-transcribe.",
+        "default": ""
+      },
+      "languageHints": {
+        "type": "array",
+        "title": "Default language hints",
+        "description": "ISO 639-1 codes. Per-request hints from the iOS app's X-Language-Hints header override these.",
+        "items": { "type": "string" },
+        "default": ["en"]
+      },
+      "routePrefix": {
+        "type": "string",
+        "title": "HTTP route prefix",
+        "default": "/buddy"
+      },
+      "audioField": {
+        "type": "string",
+        "title": "Multipart field name for the audio file",
+        "default": "audio"
+      },
+      "framing": {
+        "type": "string",
+        "title": "System framing prompt",
+        "description": "Optional override for the system addendum that frames the voice as a deliberate task."
+      },
+      "sessionId": {
+        "type": "string",
+        "title": "Target session id",
+        "description": "Optional. The agent session to inject the transcription into."
+      }
+    },
+    "required": ["authToken"]
+  }
+}

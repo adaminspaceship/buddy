@@ -67,8 +67,6 @@ export default definePluginEntry({
   id: PLUGIN_ID,
   name: "Audio Dashcam",
   register(api) {
-    if (api.registrationMode !== "full") return;
-
     const config = ((api.pluginConfig as PluginConfig | undefined) ?? {}) as PluginConfig;
     const prefix = (config.routePrefix ?? "/buddy").replace(/\/$/, "");
     const audioField = config.audioField ?? "audio";
@@ -76,11 +74,15 @@ export default definePluginEntry({
     const defaultLanguageHints = config.languageHints ?? ["en"];
     const transcriptionProvider: TranscriptionProvider = config.transcriptionProvider ?? "openclaw";
 
+    // Side-effecty work: only run during full activation. Registrations
+    // (route, tools, hooks) below run in every mode so discovery sees them.
+    const isFullActivation = api.registrationMode === "full";
+
     // Auto-generate a bearer token on first install if the user didn't set one.
     // Sync set so the rest of register() and tool calls see it immediately;
     // fire-and-forget persistence so SDK's "register must be synchronous"
     // contract is preserved.
-    if (!config.authToken) {
+    if (isFullActivation && !config.authToken) {
       const generated = randomUUID().replace(/-/g, "");
       config.authToken = generated;
       Promise.resolve().then(async () => {

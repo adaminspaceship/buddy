@@ -9,7 +9,7 @@
 #   3. Prompts for the 2-3 config values
 #   4. Writes them via `openclaw config set` (or prints a paste-able snippet
 #      if your version doesn't have it)
-#   5. openclaw plugins enable buddy + gateway restart
+#   5. openclaw plugins enable buddy-voice + gateway restart
 #   6. Prints a buddy:// pairing URL you can turn into a QR for your phone
 
 set -euo pipefail
@@ -27,7 +27,7 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 echo "→ Building plugin (npm install + tsc)..."
-npm install --silent
+npm install --include=dev --silent
 npm run build --silent
 
 echo "→ Linking into OpenClaw..."
@@ -67,11 +67,11 @@ echo "→ Writing config..."
 APPLIED=0
 if openclaw config set --help >/dev/null 2>&1; then
   openclaw config set plugins.enabled true
-  openclaw config set plugins.entries.buddy.enabled true
-  openclaw config set plugins.entries.buddy.config.authToken "$AUTH_TOKEN"
-  openclaw config set plugins.entries.buddy.config.transcriptionProvider "$PROVIDER"
+  openclaw config set plugins.entries.buddy-voice.enabled true
+  openclaw config set plugins.entries.buddy-voice.config.authToken "$AUTH_TOKEN"
+  openclaw config set plugins.entries.buddy-voice.config.transcriptionProvider "$PROVIDER"
   if [[ -n "$API_KEY" ]]; then
-    openclaw config set plugins.entries.buddy.config.apiKey "$API_KEY"
+    openclaw config set plugins.entries.buddy-voice.config.apiKey "$API_KEY"
   fi
   APPLIED=1
 fi
@@ -84,9 +84,9 @@ if [[ "$APPLIED" -eq 0 ]]; then
 {
   "plugins": {
     "enabled": true,
-    "allow": ["buddy"],
+    
     "entries": {
-      "buddy": {
+      "buddy-voice": {
         "enabled": true,
         "config": {
           "authToken": "$AUTH_TOKEN",
@@ -103,7 +103,7 @@ fi
 
 # --- Activate ---
 echo "→ Enabling..."
-openclaw plugins enable buddy || true
+openclaw plugins enable buddy-voice || true
 
 echo "→ Restarting gateway..."
 openclaw gateway restart || {

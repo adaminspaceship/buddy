@@ -17,8 +17,12 @@
     "prepublishOnly": "npm run build"
   },
   "openclaw": {
-    "extensions": ["./src/index.ts"],
-    "runtimeExtensions": ["./dist/index.js"],
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "runtimeExtensions": [
+      "./dist/index.js"
+    ],
     "compat": {
       "pluginApi": "*",
       "minGatewayVersion": "0.0.0"
@@ -54,11 +58,13 @@
     "openclaw": ">=2026.4.10"
   },
   "peerDependenciesMeta": {
-    "openclaw": { "optional": true }
+    "openclaw": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.19.39",
+    "typescript": "^5.4.0"
   },
   "engines": {
     "node": ">=20"

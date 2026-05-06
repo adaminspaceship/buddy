@@ -66,7 +66,7 @@ const DEFAULT_FRAMING = [
 export default definePluginEntry({
   id: PLUGIN_ID,
   name: "Audio Dashcam",
-  async register(api) {
+  register(api) {
     if (api.registrationMode !== "full") return;
 
     const config = ((api.pluginConfig as PluginConfig | undefined) ?? {}) as PluginConfig;
@@ -76,28 +76,29 @@ export default definePluginEntry({
     const defaultLanguageHints = config.languageHints ?? ["en"];
     const transcriptionProvider: TranscriptionProvider = config.transcriptionProvider ?? "openclaw";
 
-    // Auto-generate a bearer token on first install if the user didn't set one,
-    // and persist it so restarts keep the same token (so iPhone pairing survives).
+    // Auto-generate a bearer token on first install if the user didn't set one.
+    // Sync set so the rest of register() and tool calls see it immediately;
+    // fire-and-forget persistence so SDK's "register must be synchronous"
+    // contract is preserved.
     if (!config.authToken) {
       const generated = randomUUID().replace(/-/g, "");
-      try {
-        await api.runtime.config.mutateConfigFile((cfg: any) => {
-          cfg.plugins ??= {};
-          cfg.plugins.entries ??= {};
-          cfg.plugins.entries[PLUGIN_ID] ??= {};
-          cfg.plugins.entries[PLUGIN_ID].config ??= {};
-          if (!cfg.plugins.entries[PLUGIN_ID].config.authToken) {
-            cfg.plugins.entries[PLUGIN_ID].config.authToken = generated;
-          }
-        });
-        config.authToken = generated;
-        api.logger.info(`Generated authToken for ${PLUGIN_ID}.`);
-      } catch (err) {
-        // Falls back to using the in-memory token for this session — not
-        // persisted, but the plugin still works until restart.
-        config.authToken = generated;
-        api.logger.warn("Could not persist authToken to config; using session-only.", err);
-      }
+      config.authToken = generated;
+      Promise.resolve().then(async () => {
+        try {
+          await api.runtime.config.mutateConfigFile((cfg: any) => {
+            cfg.plugins ??= {};
+            cfg.plugins.entries ??= {};
+            cfg.plugins.entries[PLUGIN_ID] ??= {};
+            cfg.plugins.entries[PLUGIN_ID].config ??= {};
+            if (!cfg.plugins.entries[PLUGIN_ID].config.authToken) {
+              cfg.plugins.entries[PLUGIN_ID].config.authToken = generated;
+            }
+          });
+          api.logger.info(`Generated authToken for ${PLUGIN_ID}.`);
+        } catch (err) {
+          api.logger.warn("Could not persist authToken; using session-only.", err);
+        }
+      });
     }
 
     api.registerHttpRoute({

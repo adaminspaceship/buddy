@@ -1,7 +1,7 @@
 {
   "id": "buddy-voice",
   "name": "Buddy",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Receives audio from the Buddy iOS app, transcribes it, and dispatches the text to the active agent.",
   "homepage": "https://github.com/adaminspaceship/buddy",
   "configSchema": {

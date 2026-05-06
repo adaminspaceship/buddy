@@ -146,7 +146,7 @@ export default definePluginEntry({
             const runtimeCfg = api.runtime.config.current() as any;
             const hooksToken = runtimeCfg?.hooks?.token as string;
             const hooksPath = (runtimeCfg?.hooks?.path as string) ?? "/hooks";
-            const port = process.env.OPENCLAW_GATEWAY_PORT ?? "18789";
+            const port = (runtimeCfg?.gateway?.port as number | undefined)?.toString() ?? "18789";
             if (!hooksToken) {
               api.logger.warn("Buddy: hooks.token not set — cannot dispatch to agent");
               return;

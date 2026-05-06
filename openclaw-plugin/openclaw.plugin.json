@@ -1,7 +1,7 @@
 {
   "id": "buddy-voice",
   "name": "Buddy",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Receives audio from the Buddy iOS app, transcribes it, and dispatches the text to the active agent.",
   "homepage": "https://github.com/adaminspaceship/buddy",
   "activation": {
@@ -79,7 +79,7 @@
         "type": "number",
         "title": "HTTP listen port",
         "description": "TCP port the loopback server listens on. Reverse-proxy this from your gateway (e.g. Caddy).",
-        "default": 18790
+        "default": 18792
       },
       "framing": {
         "type": "string",

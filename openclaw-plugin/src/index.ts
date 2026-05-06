@@ -49,7 +49,7 @@ export default definePluginEntry({
     const defaultLanguageHints = config.languageHints ?? ["en"];
     const transcriptionProvider: TranscriptionProvider = config.transcriptionProvider ?? "openclaw";
     const host = config.host ?? "127.0.0.1";
-    const port = config.port ?? 18790;
+    const port = config.port ?? 18792;
     const isFullActivation = api.registrationMode === "full";
 
     // Auto-generate a bearer token on first install if the user didn't set one.
@@ -137,14 +137,23 @@ export default definePluginEntry({
             sendJson(res, 500, { error: "Internal server error", detail: String(err) });
           }
         }));
-        await new Promise<void>((resolve, reject) => {
-          server!.once("error", reject);
-          server!.listen(port, host, () => {
-            server!.off("error", reject);
-            resolve();
+        try {
+          await new Promise<void>((resolve, reject) => {
+            server!.once("error", reject);
+            server!.listen(port, host, () => {
+              server!.off("error", reject);
+              resolve();
+            });
           });
-        });
-        api.logger.info(`Buddy HTTP server listening on http://${host}:${port}${prefix}/voice`);
+          api.logger.info(`Buddy HTTP server listening on http://${host}:${port}${prefix}/voice`);
+        } catch (err: any) {
+          if (err?.code === "EADDRINUSE") {
+            api.logger.error(`Buddy HTTP server FAILED to bind: port ${port} is already in use. Set plugins.entries.${PLUGIN_ID}.config.port to a free port.`);
+          } else {
+            api.logger.error(`Buddy HTTP server FAILED to start: ${err?.message ?? err}`);
+          }
+          server = null;
+        }
       },
       stop: async () => {
         if (!server) return;

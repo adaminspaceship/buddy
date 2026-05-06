@@ -275,13 +275,16 @@ async function handleVoiceRequest(req: IncomingMessage, res: ServerResponse, ctx
     return sendJson(res, 422, { error: "Empty transcription" });
   }
 
-  // Dispatch: inject a system event into the WhatsApp session and wake the heartbeat.
-  // This is the same mechanism the cron scheduler uses to fire agent turns.
+  // Dispatch: send the transcription as a WhatsApp message to the user.
+  // The agent sees it as an inbound message and responds — no session wake needed.
   try {
-    const sessionKey = ctx.config.sessionId ?? 'agent:main';
-    const text = `${ctx.framing}\n\n---\n${transcription}`;
-    ctx.api.runtime.system.enqueueSystemEvent(text, { sessionKey, trusted: true });
-    ctx.api.runtime.system.requestHeartbeat({ source: 'buddy-voice', intent: 'agent-turn', reason: 'voice capture received' });
+    const adapter = await ctx.api.runtime.channel.outbound.loadAdapter('whatsapp');
+    const cfg = ctx.api.runtime.config.current() as any;
+    const allowFrom: string[] = cfg?.channels?.whatsapp?.allowFrom ?? [];
+    const to = ctx.config.sessionId || allowFrom[0] || '';
+    if (adapter && to) {
+      await adapter.send({ cfg, to, text: `${ctx.framing}\n\n---\n${transcription}` });
+    }
   } catch (err) {
     ctx.api.logger.warn("Turn injection unavailable; transcription returned to client only.", err);
   }

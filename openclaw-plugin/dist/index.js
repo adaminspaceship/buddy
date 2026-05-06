@@ -222,15 +222,13 @@ async function handleVoiceRequest(req, res, ctx) {
     if (!transcription) {
         return sendJson(res, 422, { error: "Empty transcription" });
     }
-    // Dispatch the transcript by running a subagent into the main WhatsApp session.
-    // This wakes the agent naturally without needing enqueueNextTurnInjection.
+    // Dispatch: inject a system event into the WhatsApp session and wake the heartbeat.
+    // This is the same mechanism the cron scheduler uses to fire agent turns.
     try {
         const sessionKey = ctx.config.sessionId ?? 'agent:main:whatsapp:direct:+972505566131';
-        await ctx.api.runtime.subagent.run({
-            sessionKey,
-            message: `${ctx.framing}\n\n---\n${transcription}`,
-            deliver: true,
-        });
+        const text = `${ctx.framing}\n\n---\n${transcription}`;
+        ctx.api.runtime.system.enqueueSystemEvent(text, { sessionKey, trusted: true });
+        ctx.api.runtime.system.requestHeartbeat({ source: 'buddy-voice', intent: 'agent-turn', reason: 'voice capture received' });
     }
     catch (err) {
         ctx.api.logger.warn("Turn injection unavailable; transcription returned to client only.", err);

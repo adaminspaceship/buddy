@@ -62,34 +62,38 @@ struct ContentView: View {
             ZStack {
                 ForEach(0..<3) { i in
                     Circle()
-                        .stroke(BuddyPalette.tan.opacity(0.45), lineWidth: 1.2)
-                        .frame(width: 150 + CGFloat(i * 26), height: 150 + CGFloat(i * 26))
-                        .scaleEffect(recorder.isRunning && pulse ? 1.05 : 1.0)
-                        .opacity(recorder.isRunning && pulse ? 0.55 : 1.0)
+                        .stroke(BuddyPalette.tan.opacity(0.4), lineWidth: 1)
+                        .frame(width: 140 + CGFloat(i * 28), height: 140 + CGFloat(i * 28))
+                        .scaleEffect(recorder.isRunning && pulse ? 1.04 : 1.0)
+                        .opacity(recorder.isRunning && pulse ? 0.5 : 0.9)
                         .animation(
                             recorder.isRunning ?
-                                .easeInOut(duration: 2.4 + Double(i) * 0.4)
+                                .easeInOut(duration: 2.6 + Double(i) * 0.4)
                                 .repeatForever(autoreverses: true) :
                                 .default,
                             value: pulse
                         )
                 }
                 Circle()
-                    .fill(BuddyPalette.dogFur)
-                    .frame(width: 130, height: 130)
-                Text("🐕")
-                    .font(.system(size: 64))
-                    .offset(y: -2)
+                    .fill(BuddyPalette.cream)
+                    .frame(width: 120, height: 120)
+                    .overlay(
+                        Circle().stroke(BuddyPalette.ink.opacity(0.1), lineWidth: 1)
+                    )
+                Text("b")
+                    .font(.custom("AmericanTypewriter-Bold", size: 64))
+                    .foregroundStyle(BuddyPalette.ink)
+                    .offset(y: 4)
             }
             .padding(.top, 20)
 
             VStack(spacing: 6) {
-                Text(recorder.isRunning ? "I'm listening." : "Sleeping.")
+                Text(recorder.isRunning ? "Listening" : "Paused")
                     .font(.custom("AmericanTypewriter", size: 26))
                     .foregroundStyle(BuddyPalette.ink)
                 Text(recorder.isRunning
-                     ? "The last \(settings.bufferSeconds) seconds are always ready to send."
-                     : "Wake me up in Settings to start buffering.")
+                     ? "The last \(settings.bufferSeconds) seconds are ready to send."
+                     : "Turn on listening in Settings to start buffering.")
                     .font(.system(.subheadline, design: .serif))
                     .foregroundStyle(BuddyPalette.ink.opacity(0.65))
                     .multilineTextAlignment(.center)
@@ -108,7 +112,7 @@ struct ContentView: View {
             }
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: "pawprint.fill")
+                Image(systemName: "arrow.up.circle.fill")
                 Text("Send the last \(settings.bufferSeconds)s")
                     .font(.custom("AmericanTypewriter-Bold", size: 17))
             }
@@ -128,7 +132,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Microphone access needed", systemImage: "mic.slash.fill")
                 .font(.system(.headline, design: .serif))
-            Text("Buddy needs the mic to keep his ear out for you.")
+            Text("Grant access so Buddy can keep the rolling buffer alive.")
                 .font(.system(.subheadline, design: .serif))
                 .foregroundStyle(.secondary)
             Button("Allow microphone") { requestMic() }
@@ -147,7 +151,7 @@ struct ContentView: View {
     private var recordingsList: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Fetched")
+                Text("Recordings")
                     .font(.custom("AmericanTypewriter-Bold", size: 20))
                     .foregroundStyle(BuddyPalette.ink)
                 Spacer()
@@ -179,13 +183,13 @@ struct ContentView: View {
 
     private var emptyRecordings: some View {
         VStack(spacing: 12) {
-            Image(systemName: "pawprint")
-                .font(.system(size: 32))
+            Image(systemName: "waveform.slash")
+                .font(.system(size: 30))
                 .foregroundStyle(BuddyPalette.ink.opacity(0.35))
-            Text("No fetches yet")
+            Text("No recordings yet")
                 .font(.custom("AmericanTypewriter", size: 17))
                 .foregroundStyle(BuddyPalette.ink.opacity(0.7))
-            Text("Press the Action Button to send Buddy off.")
+            Text("Press the Action Button to capture the last \(settings.bufferSeconds)s.")
                 .font(.system(.caption, design: .serif))
                 .foregroundStyle(BuddyPalette.ink.opacity(0.5))
                 .multilineTextAlignment(.center)
@@ -249,7 +253,6 @@ struct CaptureMeta {
 enum BuddyPalette {
     static let cream = Color(red: 0.97, green: 0.94, blue: 0.88)        // #F8F0E0
     static let tan = Color(red: 0.84, green: 0.74, blue: 0.55)           // #D6BC8C
-    static let dogFur = Color(red: 0.78, green: 0.55, blue: 0.32)        // #C68C52
     static let ink = Color(red: 0.18, green: 0.14, blue: 0.10)           // #2D241A
     static let meadow = Color(red: 0.72, green: 0.78, blue: 0.55)        // #B8C68C
     static let sky = Color(red: 0.82, green: 0.89, blue: 0.92)           // #D2E2EB
@@ -280,7 +283,7 @@ private struct RecordingCard: View {
             Button(action: onPlayToggle) {
                 ZStack {
                     Circle()
-                        .fill(isPlaying ? BuddyPalette.dogFur.opacity(0.25) : BuddyPalette.ink.opacity(0.08))
+                        .fill(isPlaying ? BuddyPalette.tan.opacity(0.35) : BuddyPalette.ink.opacity(0.08))
                         .frame(width: 46, height: 46)
                     Image(systemName: isPlaying ? "stop.fill" : "play.fill")
                         .font(.system(size: 16, weight: .bold))
@@ -339,7 +342,7 @@ private struct RecordingCard: View {
     private var stateColor: Color {
         switch uploadState {
         case .failed?: return .red
-        case .uploading?: return BuddyPalette.dogFur
+        case .uploading?: return BuddyPalette.ink.opacity(0.7)
         default: return BuddyPalette.ink.opacity(0.55)
         }
     }

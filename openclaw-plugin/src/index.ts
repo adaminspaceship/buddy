@@ -66,7 +66,7 @@ const DEFAULT_FRAMING = [
 export default definePluginEntry({
   id: PLUGIN_ID,
   name: "Audio Dashcam",
-  register(api) {
+  async register(api) {
     if (api.registrationMode !== "full") return;
 
     const config = ((api.pluginConfig as PluginConfig | undefined) ?? {}) as PluginConfig;
@@ -75,6 +75,30 @@ export default definePluginEntry({
     const framing = config.framing ?? DEFAULT_FRAMING;
     const defaultLanguageHints = config.languageHints ?? ["en"];
     const transcriptionProvider: TranscriptionProvider = config.transcriptionProvider ?? "openclaw";
+
+    // Auto-generate a bearer token on first install if the user didn't set one,
+    // and persist it so restarts keep the same token (so iPhone pairing survives).
+    if (!config.authToken) {
+      const generated = randomUUID().replace(/-/g, "");
+      try {
+        await api.runtime.config.mutateConfigFile((cfg: any) => {
+          cfg.plugins ??= {};
+          cfg.plugins.entries ??= {};
+          cfg.plugins.entries[PLUGIN_ID] ??= {};
+          cfg.plugins.entries[PLUGIN_ID].config ??= {};
+          if (!cfg.plugins.entries[PLUGIN_ID].config.authToken) {
+            cfg.plugins.entries[PLUGIN_ID].config.authToken = generated;
+          }
+        });
+        config.authToken = generated;
+        api.logger.info(`Generated authToken for ${PLUGIN_ID}.`);
+      } catch (err) {
+        // Falls back to using the in-memory token for this session — not
+        // persisted, but the plugin still works until restart.
+        config.authToken = generated;
+        api.logger.warn("Could not persist authToken to config; using session-only.", err);
+      }
+    }
 
     api.registerHttpRoute({
       id: `${PLUGIN_ID}.voice`,
@@ -224,20 +248,43 @@ export default definePluginEntry({
           return { text: "Need an endpoint URL — pass the public URL of /buddy/voice (e.g. https://your-host.com/buddy/voice)." };
         }
         const token = config.authToken ?? "";
-        if (!token) {
-          return { text: "No authToken set in plugin config. Configure one first, then try again." };
-        }
         const pairURL = `buddy://configure?endpoint=${encodeURIComponent(endpoint)}&token=${encodeURIComponent(token)}`;
+
+        // Try the runtime's built-in QR rendering first — gives a PNG that
+        // chat surfaces can render inline. Falls back to ASCII if the helper
+        // isn't there or fails.
+        let pngAttachment: any = null;
+        try {
+          const media = api.runtime?.media;
+          if (media?.renderQr || media?.qr) {
+            const renderer = media.renderQr ?? media.qr;
+            const result = await renderer.call(media, { text: pairURL, format: "png", size: 320 });
+            if (result?.bytes || result?.data) {
+              pngAttachment = {
+                mimeType: "image/png",
+                bytes: result.bytes ?? result.data,
+                name: "buddy-pair.png",
+              };
+            }
+          }
+        } catch (err) {
+          api.logger.warn("Inline QR rendering unavailable, falling back to ASCII", err);
+        }
 
         const qrAscii = await new Promise<string>((resolve) => {
           qrcode.generate(pairURL, { small: true }, resolve);
         });
 
-        return {
-          text:
-            `Scan this with your iPhone Camera:\n\n${qrAscii}\n` +
-            `Or paste into Buddy → Settings:\n${pairURL}\n`,
-        };
+        const text =
+          "**Pair your iPhone**\n\n" +
+          "Open the Camera app and point it at the QR below. Tap the banner — Buddy will auto-fill its Settings.\n\n" +
+          "```\n" + qrAscii + "```\n" +
+          "If the QR doesn't scan in this view, paste this into Buddy → Settings instead:\n\n" +
+          "```\n" + pairURL + "\n```\n";
+
+        return pngAttachment
+          ? { text, attachments: [pngAttachment] }
+          : { text };
       },
     });
 

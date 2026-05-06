@@ -10,8 +10,9 @@
       "authToken": {
         "type": "string",
         "title": "Bearer token",
-        "description": "The token the iOS app must send. Any long random string works.",
-        "format": "secret"
+        "description": "The token the iOS app must send. Auto-generated on first install if empty.",
+        "format": "secret",
+        "default": ""
       },
       "transcriptionProvider": {
         "type": "string",
@@ -60,6 +61,6 @@
         "description": "Optional. The agent session to inject the transcription into."
       }
     },
-    "required": ["authToken"]
+    "required": []
   }
 }

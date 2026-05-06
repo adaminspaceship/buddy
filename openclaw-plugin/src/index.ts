@@ -200,19 +200,20 @@ async function handleVoiceRequest(req: IncomingMessage, res: ServerResponse, ctx
     ? headerHints.split(",").map((s) => s.trim()).filter(Boolean)
     : ctx.defaultLanguageHints;
 
-  // Instant ack — send 🎙️ immediately so user knows it was received
+  // Instant ack — direct outbound message, no agent turn
   setImmediate(async () => {
     try {
       const cfg = ctx.api.runtime.config.current() as any;
-      const hooksToken = cfg?.hooks?.token as string | undefined;
-      const hooksPath = (cfg?.hooks?.path as string | undefined) ?? '/hooks';
+      const allowFrom: string[] = cfg?.channels?.whatsapp?.allowFrom ?? [];
+      const to = allowFrom[0] || '';
+      const gToken = process.env.OPENCLAW_GATEWAY_TOKEN || '';
       const port = process.env.OPENCLAW_GATEWAY_PORT || '18789';
-      if (hooksToken) {
-        await fetch(`http://127.0.0.1:${port}${hooksPath}/voice`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${hooksToken}` },
-          body: JSON.stringify({ transcription: '🎙️' }),
-        });
+      if (to && gToken) {
+        const { execFile } = await import('node:child_process');
+        execFile('openclaw', ['message', 'send', '--channel', 'whatsapp', '--target', to, '--message', '🎙️'],
+          { env: { ...process.env, OPENCLAW_GATEWAY_TOKEN: gToken, OPENCLAW_GATEWAY_PORT: port }, timeout: 8000 },
+          () => {}
+        );
       }
     } catch {}
   });

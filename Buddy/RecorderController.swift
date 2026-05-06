@@ -114,9 +114,13 @@ final class RecorderController: ObservableObject {
         Uploader.shared.enqueue(record) { [weak self] updated in
             Task { @MainActor in
                 guard let self else { return }
+                self.log.info("🟡 recorder got completion for \(updated.id.uuidString, privacy: .public): \(String(describing: updated.uploadState), privacy: .public)")
                 if self.lastCapture?.id == updated.id { self.lastCapture = updated }
                 if let idx = self.recentCaptures.firstIndex(where: { $0.id == updated.id }) {
                     self.recentCaptures[idx] = updated
+                    self.log.info("🟡 updated recentCaptures[\(idx, privacy: .public)] in-place")
+                } else {
+                    self.log.warning("🟡 no matching record in recentCaptures for \(updated.id.uuidString, privacy: .public)")
                 }
             }
         }

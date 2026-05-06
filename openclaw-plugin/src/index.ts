@@ -5,7 +5,7 @@ import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import QRCode from "qrcode";
-import { execFile } from "node:child_process";
+
 
 const PLUGIN_ID = "buddy-voice";
 
@@ -276,30 +276,25 @@ async function handleVoiceRequest(req: IncomingMessage, res: ServerResponse, ctx
     return sendJson(res, 422, { error: "Empty transcription" });
   }
 
-  // Dispatch: invoke the openclaw CLI to send a WhatsApp message to the user.
-  // This triggers an inbound turn in the agent session and gets a reply.
+  // Dispatch via OpenClaw hooks — the native mechanism for exactly this use case.
+  // POST to /hooks/voice with the transcription; the hook template runs the
+  // agent turn and delivers the reply to WhatsApp automatically.
   try {
     const cfg = ctx.api.runtime.config.current() as any;
-    const allowFrom: string[] = cfg?.channels?.whatsapp?.allowFrom ?? [];
-    const to = allowFrom[0] || '';
-    const token = (cfg?.gateway?.auth?.token as string | undefined) || process.env.OPENCLAW_GATEWAY_TOKEN || '';
+    const hooksToken = cfg?.hooks?.token as string | undefined;
+    const hooksPath = (cfg?.hooks?.path as string | undefined) ?? '/hooks';
     const port = process.env.OPENCLAW_GATEWAY_PORT || '18789';
-    // Just send the transcript — Jarvis knows it came from Buddy via system prompt
-    const message = `🎙️ ${transcription}`;
-    if (to) {
-      await new Promise<void>((resolve) => {
-        execFile('openclaw', ['message', 'send',
-          '--channel', 'whatsapp',
-          '--target', to,
-          '--message', message,
-        ], {
-          env: { ...process.env, OPENCLAW_GATEWAY_TOKEN: token, OPENCLAW_GATEWAY_PORT: port },
-          timeout: 15000,
-        }, (err) => {
-          if (err) ctx.api.logger.warn('Buddy dispatch CLI failed: ' + String(err));
-          resolve();
-        });
+    if (hooksToken) {
+      await fetch(`http://127.0.0.1:${port}${hooksPath}/voice`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${hooksToken}`,
+        },
+        body: JSON.stringify({ transcription }),
       });
+    } else {
+      ctx.api.logger.warn('Buddy: hooks.token not configured — cannot dispatch to agent');
     }
   } catch (err) {
     ctx.api.logger.warn("Turn injection unavailable; transcription returned to client only.", err);

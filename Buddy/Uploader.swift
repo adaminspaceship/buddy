@@ -83,11 +83,7 @@ final class Uploader: NSObject {
         req.timeoutInterval = 30
 
         let payload: [String: Any] = [
-            "transcript": transcript,
-            "capturedAt": ISO8601DateFormatter().string(from: record.capturedAt),
-            "durationSeconds": record.durationSeconds,
-            "reason": record.reason,
-            "languageHints": SettingsStore.shared.languageCodes,
+            "transcription": transcript,
         ]
         do {
             req.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])

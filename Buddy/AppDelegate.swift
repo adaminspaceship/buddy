@@ -26,9 +26,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     private func configureAudioSession() {
         let session = AVAudioSession.sharedInstance()
         do {
+            // No .allowBluetoothHFP — including it makes iOS negotiate AirPods
+            // over HFP at activation, which yanks them off the user's Mac.
+            // Built-in mic is fine; the phone is usually in a pocket anyway.
             try session.setCategory(.playAndRecord,
                                     mode: .default,
-                                    options: [.mixWithOthers, .allowBluetoothHFP, .defaultToSpeaker])
+                                    options: [.mixWithOthers, .defaultToSpeaker])
             try session.setActive(true, options: [])
         } catch {
             Self.log.error("Audio session config failed: \(error.localizedDescription, privacy: .public)")

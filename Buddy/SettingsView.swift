@@ -73,7 +73,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Agent")
                 } footer: {
-                    Text("Buddy POSTs `{ \"message\": \"<transcript>\" }` to your OpenClaw /hooks/agent endpoint.")
+                    Text("Buddy POSTs `{ \"transcription\": \"<transcript>\" }` to your OpenClaw /hooks/agent endpoint.")
                 }
 
                 Section {

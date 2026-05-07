@@ -24,7 +24,7 @@ You wonder something out loud. Walking down the street, in a meeting, mid-conver
 1. **Always-on rolling buffer.** `AVAudioEngine` keeps the last 30s of mic audio in memory (configurable: 10s — 3min).
 2. **Tap → capture.** The Action Button fires an `AppIntent`, snapshots the buffer to a WAV.
 3. **On-device transcription.** Buddy hits ElevenLabs Scribe with **your own API key** — audio never goes to a third party you don't control.
-4. **POST to your agent.** The transcript is sent as `{ "message": "<text>" }` to your OpenClaw `/hooks/agent` endpoint (or any JSON webhook).
+4. **POST to your agent.** The transcript is sent as `{ "transcription": "<text>" }` to your OpenClaw `/hooks/agent` endpoint (or any JSON webhook).
 5. **Agent does its thing.** The reply lands wherever your agent normally sends — WhatsApp, Slack, etc.
 
 ```

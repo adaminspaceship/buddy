@@ -53,6 +53,7 @@ final class SettingsStore: ObservableObject {
         static let authToken = "authToken"
         static let bufferSeconds = "bufferSeconds"
         static let languageCodes = "languageCodes"
+        static let elevenlabsAPIKey = "elevenlabsAPIKey"
     }
 
     private enum Defaults {
@@ -60,6 +61,7 @@ final class SettingsStore: ObservableObject {
         static let authToken = ""
         static let bufferSeconds = 30
         static let languageCodes = ["en"]
+        static let elevenlabsAPIKey = ""
     }
 
     @Published var alwaysOn: Bool { didSet { defaults.set(alwaysOn, forKey: Keys.alwaysOn) } }
@@ -80,6 +82,9 @@ final class SettingsStore: ObservableObject {
     @Published var languageCodes: [String] {
         didSet { defaults.set(languageCodes, forKey: Keys.languageCodes) }
     }
+    @Published var elevenlabsAPIKey: String {
+        didSet { defaults.set(elevenlabsAPIKey, forKey: Keys.elevenlabsAPIKey) }
+    }
 
     var languages: [LanguageOption] {
         languageCodes.compactMap(LanguageOption.find)
@@ -92,5 +97,6 @@ final class SettingsStore: ObservableObject {
         self.bufferSeconds = defaults.object(forKey: Keys.bufferSeconds) as? Int ?? Defaults.bufferSeconds
         self.languageCodes = (defaults.array(forKey: Keys.languageCodes) as? [String])
             ?? Defaults.languageCodes
+        self.elevenlabsAPIKey = defaults.string(forKey: Keys.elevenlabsAPIKey) ?? Defaults.elevenlabsAPIKey
     }
 }

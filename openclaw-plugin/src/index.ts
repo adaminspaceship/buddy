@@ -72,67 +72,90 @@ export default definePluginEntry({
           }
         }
 
-        // Parse multipart audio
-        let audioBuffer: Buffer | null = null;
-        let audioMime = "audio/wav";
-        let audioFilename = "clip.wav";
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const bb = busboy({ headers: req.headers, limits: { fileSize: 100 * 1024 * 1024 } });
-            bb.on("file", (field, stream, info) => {
-              if (field !== audioField) { stream.resume(); return; }
-              audioMime = info.mimeType || audioMime;
-              audioFilename = info.filename || audioFilename;
-              const chunks: Buffer[] = [];
-              stream.on("data", (c: Buffer) => chunks.push(c));
-              stream.on("end", () => { audioBuffer = Buffer.concat(chunks); });
-              stream.on("error", reject);
-            });
-            bb.on("close", resolve);
-            bb.on("error", reject);
-            req.pipe(bb);
-          });
-        } catch (err) {
-          res.statusCode = 400;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ error: "Multipart parse failed", detail: String(err) }));
-          return true;
-        }
-
-        if (!audioBuffer) {
-          res.statusCode = 400;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ error: `Missing audio field "${audioField}"` }));
-          return true;
-        }
-
-        // Stage to disk
-        const stateDir = await api.runtime.state.resolveStateDir(PLUGIN_ID);
-        await mkdir(stateDir, { recursive: true });
-        const ext = audioFilename.includes(".") ? audioFilename.slice(audioFilename.lastIndexOf(".")) : ".wav";
-        const stagedPath = join(stateDir, `clip-${Date.now()}-${randomUUID()}${ext}`);
-        await writeFile(stagedPath, audioBuffer);
-
-        // Transcribe
+        const contentType = (req.headers["content-type"] as string | undefined) ?? "";
         let transcription: string;
-        try {
-          if (provider === "openclaw") {
-            const result = await api.runtime.mediaUnderstanding.runFile({
-              capability: "audio",
-              filePath: stagedPath,
-              mime: audioMime,
-              cfg: api.runtime.config.current() as any,
-            });
-            transcription = (result?.text ?? "").trim();
-            if (!transcription) throw new Error("OpenClaw STT returned empty text");
-          } else {
-            transcription = await transcribeExternal(stagedPath, audioMime, cfg);
+
+        // Path A: client transcribed locally and sent JSON. This is the new
+        // default (Buddy >=0.21 uses ElevenLabs on-device with the user's key).
+        if (contentType.includes("application/json")) {
+          let body: any;
+          try {
+            const chunks: Buffer[] = [];
+            for await (const chunk of req) chunks.push(chunk as Buffer);
+            body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          } catch (err) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "Invalid JSON", detail: String(err) }));
+            return true;
           }
-        } catch (err) {
-          res.statusCode = 502;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ error: "Transcription failed", detail: String(err) }));
-          return true;
+          transcription = String(body?.transcript ?? "").trim();
+          if (!transcription) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "Missing transcript field" }));
+            return true;
+          }
+        } else {
+          // Path B: legacy multipart audio — plugin transcribes server-side.
+          let audioBuffer: Buffer | null = null;
+          let audioMime = "audio/wav";
+          let audioFilename = "clip.wav";
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const bb = busboy({ headers: req.headers, limits: { fileSize: 100 * 1024 * 1024 } });
+              bb.on("file", (field, stream, info) => {
+                if (field !== audioField) { stream.resume(); return; }
+                audioMime = info.mimeType || audioMime;
+                audioFilename = info.filename || audioFilename;
+                const chunks: Buffer[] = [];
+                stream.on("data", (c: Buffer) => chunks.push(c));
+                stream.on("end", () => { audioBuffer = Buffer.concat(chunks); });
+                stream.on("error", reject);
+              });
+              bb.on("close", resolve);
+              bb.on("error", reject);
+              req.pipe(bb);
+            });
+          } catch (err) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "Multipart parse failed", detail: String(err) }));
+            return true;
+          }
+
+          if (!audioBuffer) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: `Missing audio field "${audioField}"` }));
+            return true;
+          }
+
+          const stateDir = await api.runtime.state.resolveStateDir(PLUGIN_ID);
+          await mkdir(stateDir, { recursive: true });
+          const ext = audioFilename.includes(".") ? audioFilename.slice(audioFilename.lastIndexOf(".")) : ".wav";
+          const stagedPath = join(stateDir, `clip-${Date.now()}-${randomUUID()}${ext}`);
+          await writeFile(stagedPath, audioBuffer);
+
+          try {
+            if (provider === "openclaw") {
+              const result = await api.runtime.mediaUnderstanding.runFile({
+                capability: "audio",
+                filePath: stagedPath,
+                mime: audioMime,
+                cfg: api.runtime.config.current() as any,
+              });
+              transcription = (result?.text ?? "").trim();
+              if (!transcription) throw new Error("OpenClaw STT returned empty text");
+            } else {
+              transcription = await transcribeExternal(stagedPath, audioMime, cfg);
+            }
+          } catch (err) {
+            res.statusCode = 502;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "Transcription failed", detail: String(err) }));
+            return true;
+          }
         }
 
         // Respond to app immediately

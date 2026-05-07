@@ -183,6 +183,7 @@ final class RecorderController: ObservableObject {
 struct CaptureRecord: Identifiable, Equatable {
     enum UploadState: Equatable {
         case pending
+        case transcribing
         case uploading
         case uploaded(transcript: String?)
         case failed(message: String)

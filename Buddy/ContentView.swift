@@ -513,6 +513,7 @@ private struct RecordingCard: View {
     private var stateLabel: String {
         switch uploadState {
         case .none, .pending?: return "Saved · waiting to send"
+        case .transcribing?: return "Transcribing with ElevenLabs…"
         case .uploading?: return "Sending to your agent…"
         case .uploaded(.none)?: return "Sent · agent is on it"
         case .uploaded(.some)?: return ""

@@ -27,6 +27,9 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    SecureField("xi-api-key from elevenlabs.io", text: $settings.elevenlabsAPIKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                     NavigationLink {
                         LanguagePickerView(selected: $settings.languageCodes)
                     } label: {
@@ -38,9 +41,9 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("Languages")
+                    Text("Transcription")
                 } footer: {
-                    Text("Hint to the transcription model. Pick one for clean speech, multiple if you switch languages mid-sentence.")
+                    Text("Buddy transcribes locally with ElevenLabs Scribe using your own key, then sends only the text to your agent. Get a key at elevenlabs.io/app/settings/api-keys.")
                 }
 
                 Section {

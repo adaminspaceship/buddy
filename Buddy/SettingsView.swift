@@ -47,11 +47,11 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    TextField("https://your-agent.example.com/voice", text: $settings.uploadURL)
+                    TextField("https://your-gateway.example.com/hooks/agent", text: $settings.uploadURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
-                    SecureField("Bearer token (optional)", text: $settings.authToken)
+                    SecureField("Bearer token", text: $settings.authToken)
                     Button {
                         Task { await testConnection() }
                     } label: {
@@ -73,7 +73,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Agent")
                 } footer: {
-                    Text("Or scan a configure-by-QR code from your agent's setup page to fill these in automatically.")
+                    Text("Buddy POSTs `{ \"message\": \"<transcript>\" }` to your OpenClaw /hooks/agent endpoint.")
                 }
 
                 Section {
